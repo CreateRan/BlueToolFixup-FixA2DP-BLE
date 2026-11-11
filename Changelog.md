@@ -1,11 +1,17 @@
 BrcmPatchRAM Changelog
 ======================
+#### v2.7.6
+- **BlueToolFixup: adaptive runtime advsets engine** (`BrcmPatchRAM/btlfx-advsets.h`) — replaces the hardcoded macOS 26.4.1 byte patterns with Lilu find-masks (all disp32/rel32 wildcarded) plus **structural pairing** for the capability getters: two adjacent capability calls identified by their flag addresses, verified on 26.4.1 (vtable 0x9a8/0x9c0) and 26.7.2 (0x9a8/0x918). Page-level transactions (locate-all → write → read-back; any mismatch aborts the whole page), idempotent re-patch, per-site diagnostics in syslog
+- **RPA / Filter Accept List group** — 5 injected sites from upstream PR #1, managed as all-or-nothing groups with structural cross-checks (0xDB / 0x84 / 0x320); never writes a trampoline into unverified code
+- **Engine runs by default** — bluetoothd is patched in memory at page-in through the cs_validate hook; no disk patching, no snapshot reboot. `-btlfxadvsetsoff` disables everything, `-btlfxrpaoff` disables the RPA/FAL group only (A/B)
+- This is the exact source of the deployed BlueToolFixup 2.7.6 kext (binary `4cf277ca…`), verified working on macOS 26.7.2 (25G332)
+
+#### v2.7.5
+- Adaptive engine introduced, default-on (`-btlfxadvsetsoff` to disable); core sites adapted to all macOS 26 builds
+
 #### v2.7.4
 - **Fast-Connect A2DP patch**: fixes "Connected but No Sound" for third-party controllers on Apple headphones — restores the full A2DP gate mask (`kFastConnectA2DPGateMask12_0`) on connect
-- **BlueToolFixup: BLE advertising patch engine** (`-btlfxadvsets`): bluetoothd now accepts and patches BLE advertising sets from third-party controllers (RPA/FAL site handling), fixing BLE discovery and reconnection with such controllers
-  - `-btlfxadvsets` enables the engine; `-btlfxadvsetsoff` disables all patched sites; `-btlfxrpaoff` disables RPA handling only (A/B testing)
-- **tools/bluetoothd-patch**: companion patcher (`a2dp_fix.py` + `apply.sh`) extending the `-btlfxadvsets` bluetoothd patches from macOS 26.4.1 (25E253) to **all macOS 26 builds** via wildcard-tolerant byte patterns; verified on 26.7.2 (25G332); safe abort on pattern mismatch, backup + restore support, x86_64 slice only
-- Bumped project version 2.7.3 → **2.7.4** (base: upstream `pr/btlfx-advsets` @ `0fb661b`); documented fork changes in README.md / README_CN.md
+- **tools/bluetoothd-patch** (`a2dp_fix.py` + `apply.sh`): disk patcher extending the original `-btlfxadvsets` bluetoothd patches from macOS 26.4.1 (25E253) to later builds via wildcard-tolerant byte patterns; verified on 26.7.2 (25G332). Since v2.7.5 this is a **fallback** for future builds where the in-kext engine misses — the kext no longer needs it on supported builds
 
 #### v2.7.2
 - Added `bluetoothd` patches for macOS 26 (thx @spotlightishere et al)

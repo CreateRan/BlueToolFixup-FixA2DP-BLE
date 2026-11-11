@@ -3,25 +3,24 @@ BrcmPatchRAM
 
 [![Build Status](https://github.com/acidanthera/BrcmPatchRAM/actions/workflows/main.yml/badge.svg?branch=master)](https://github.com/acidanthera/BrcmPatchRAM/actions) [![Scan Status](https://scan.coverity.com/projects/22191/badge.svg?flat=1)](https://scan.coverity.com/projects/22191)
 
-### What this fork changes (v2.7.4)
+### What this fork changes (v2.7.6)
 
-This fork extends the upstream BrcmPatchRAM with two feature patches targeting **third-party Bluetooth controllers** (e.g. replacement BT dongles / non-Apple cards) used on hackintosh machines:
+This fork extends the upstream BrcmPatchRAM with feature patches targeting **third-party Bluetooth controllers** (e.g. replacement BT dongles / non-Apple cards) used on hackintosh machines:
 
 1. **Fast-Connect A2DP patch** — fixes the *"Connected but No Sound"* issue: third-party controllers advertise a reduced A2DP codec/gate mask, so Apple headphones connect without audio. The patch restores the full A2DP gate mask (`kFastConnectA2DPGateMask12_0`) when the controller connects. See commit `d8bd62a` (upstream `fix-a2dp-fastconnect`).
 
-2. **BLE advertising patch engine (`-btlfxadvsets`)** — a new optional engine in BlueToolFixup that lets bluetoothd accept/patch **BLE advertising sets** from third-party controllers (RPA / Filter Accept List handling), which upstream BlueToolFixup rejects. This fixes BLE device discovery and reconnection problems with such controllers. See commit `0fb661b` (upstream `pr/btlfx-advsets`).
+2. **Adaptive BLE advertising engine in BlueToolFixup** (`BrcmPatchRAM/btlfx-advsets.h`, v2.7.5+) — lets bluetoothd accept BLE advertising sets (RPA / Filter Accept List) from third-party controllers, which upstream rejects ("Stack is not started" → broken AirDrop/Continuity discovery from iPhone). Instead of hardcoding macOS 26.4.1 byte offsets, the engine matches each site with **wildcarded Lilu find-masks** and **structural pairing** (adjacent capability calls identified by their flag addresses), verified on 26.4.1 and 26.7.2. Pages are patched in memory through the cs_validate hook with all-or-nothing transactions — no disk patching, no SIP changes, **on by default**. Adds 5 RPA/FAL code-injection sites (upstream PR #1) managed as all-or-nothing groups.
 
-3. **bluetoothd companion patcher — macOS 26 universal support** (`tools/bluetoothd-patch/`) — the upstream `-btlfxadvsets` bluetoothd patches only match **macOS 26.4.1 (25E253)**. The bundled `a2dp_fix.py` extends the same 6 patch sites to **any macOS 26 build** using wildcard-tolerant byte patterns: it detects already-patched sites (`done` / `todo` / `missing`), aborts safely when a pattern does not match the running build, backs up before writing, and supports `--check` / `--patch` / `--restore`. Verified on **macOS 26.7.2 (25G332)**; x86_64 slice only (arm64e untouched). `apply.sh` automates the whole flow (mount system volume → patch → reboot).
+3. **bluetoothd disk patcher — fallback** (`tools/bluetoothd-patch/`) — for future macOS 26 builds where the in-kext engine misses: `a2dp_fix.py` patches `/usr/sbin/bluetoothd` on disk with wildcard-tolerant patterns (state-aware `done`/`todo`/`missing`, safe abort on mismatch, backup + `--restore`), `apply.sh` automates mount → patch → reboot. x86_64 slice only. **Not needed on builds the kext already covers** (verified on 26.4.1 / 26.7.2).
 
 **Boot arguments**
 
 | Boot-arg | Effect |
 |---|---|
-| `-btlfxadvsets` | Enable the BLE advertising patch engine |
-| `-btlfxadvsetsoff` | Disable all patched advertising sites (full A/B off switch) |
-| `-btlfxrpaoff` | Disable RPA handling only (for A/B testing) |
+| `-btlfxadvsetsoff` | Disable the whole advsets engine (it runs by default since 2.7.5) |
+| `-btlfxrpaoff` | Disable the RPA/FAL site group only (A/B testing) |
 
-**Build / release**: project version bumped to **2.7.4** (base: upstream `pr/btlfx-advsets` @ `0fb661b`). See [Changelog](./Changelog.md) and [简体中文说明](./README_CN.md).
+**Build / release**: project version **2.7.6** (source of the deployed BlueToolFixup 2.7.6 kext, binary `4cf277ca…`). See [Changelog](./Changelog.md) and [简体中文说明](./README_CN.md).
 
 ### Translate Language
 

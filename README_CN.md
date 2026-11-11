@@ -3,25 +3,24 @@ BrcmPatchRAM
 
 [![Build Status](https://github.com/acidanthera/BrcmPatchRAM/workflows/CI/badge.svg?branch=master)](https://github.com/acidanthera/BrcmPatchRAM/actions) [![Scan Status](https://scan.coverity.com/projects/22191/badge.svg?flat=1)](https://scan.coverity.com/projects/22191)
 
-### 本 Fork 的改动（v2.7.4）
+### 本 Fork 的改动（v2.7.6）
 
-本 fork 在官方 BrcmPatchRAM 基础上，针对**第三方蓝牙控制器**（如替换用的 BT 蓝牙模块 / 非 Apple 方案网卡）新增了两个功能补丁：
+本 fork 在官方 BrcmPatchRAM 基础上，针对**第三方蓝牙控制器**（如替换用的 BT 蓝牙模块 / 非 Apple 方案网卡）新增了以下功能补丁：
 
 1. **Fast-Connect A2DP 补丁** — 修复第三方控制器连接 Apple 耳机时「**已连接但没有声音**」的问题：第三方控制器广播的 A2DP codec/gate 掩码不完整，导致耳机连接成功但不走 A2DP 音频。补丁在控制器连接时恢复完整的 A2DP gate 掩码（`kFastConnectA2DPGateMask12_0`）。对应提交 `d8bd62a`（上游 `fix-a2dp-fastconnect` 分支）。
 
-2. **BLE 广播补丁引擎（`-btlfxadvsets`）** — BlueToolFixup 新增的可选引擎：让 bluetoothd 接受并修补第三方控制器的 **BLE advertising sets**（RPA / Filter Accept List 处理），官方 BlueToolFixup 会直接拒绝这类广播集，导致 BLE 设备发现失败、重连异常。对应提交 `0fb661b`（上游 `pr/btlfx-advsets` 分支）。
+2. **BlueToolFixup 自适应 BLE 广播引擎**（`BrcmPatchRAM/btlfx-advsets.h`，v2.7.5+）— 让 bluetoothd 接受第三方控制器的 **BLE advertising sets**（RPA / Filter Accept List 处理），官方 BlueToolFixup 会直接拒绝这类广播集（表现为 "Stack is not started"，iPhone 侧 AirDrop/接力发现失效）。与上游写死 26.4.1 字节偏移的做法不同，引擎用 **Lilu 掩码模式（disp32/rel32 全部通配）+ 结构配对**（按标志位地址识别相邻的能力 getter 对）定位每个补丁点，已在 26.4.1 与 26.7.2 上验证全部命中。补丁在内核 cs_validate 钩子里**逐页内存写入**（先全部定位、再写入、再回读，任一不符整页放弃），不碰磁盘、不动 SIP，**默认开启**。并入了上游 PR #1 的 5 个 RPA/FAL 代码注入站点（按组全有或全无）。
 
-3. **bluetoothd 配套补丁器 —— macOS 26 全版本支持**（`tools/bluetoothd-patch/`）— 上游的 `-btlfxadvsets` bluetoothd 补丁只匹配 **macOS 26.4.1 (25E253)**。随仓库提供的 `a2dp_fix.py` 用通配符容忍的字节模式把同样的 6 处补丁扩展到**任意 macOS 26 构建**：自动识别已打/待打/未找到三种状态，字节模式不匹配当前构建时安全中止，写入前自动备份，支持 `--check` / `--patch` / `--restore`。已在 **macOS 26.7.2 (25G332)** 实测通过；只改 x86_64 切片，不动 arm64e。`apply.sh` 一键完成全流程（挂载系统卷 → 打补丁 → 重启生效）。
+3. **bluetoothd 磁盘补丁器 —— 兜底**（`tools/bluetoothd-patch/`）— 面向未来 kext 引擎未覆盖的 macOS 26 构建：`a2dp_fix.py` 用通配符字节模式补磁盘上的 `/usr/sbin/bluetoothd`（自动识别已打/待打/未找到，不符即安全中止，写入前备份，支持 `--check` / `--patch` / `--restore`），`apply.sh` 一键完成挂载系统卷 → 打补丁 → 重启。只改 x86_64 切片。**kext 已覆盖的构建（26.4.1 / 26.7.2）无需使用**。
 
 **启动参数**
 
 | 启动参数 | 作用 |
 |---|---|
-| `-btlfxadvsets` | 启用 BLE 广播补丁引擎 |
-| `-btlfxadvsetsoff` | 关闭全部已修补的广播站点（完全关闭开关） |
-| `-btlfxrpaoff` | 仅关闭 RPA 处理（用于 A/B 对比测试） |
+| `-btlfxadvsetsoff` | 整体关闭 advsets 引擎（v2.7.5 起默认开启） |
+| `-btlfxrpaoff` | 仅关闭 RPA/FAL 站点组（用于 A/B 对比测试） |
 
-**构建/版本**：工程版本号提升至 **2.7.4**（基线：上游 `pr/btlfx-advsets` @ `0fb661b`）。详见 [Changelog](./Changelog.md) 与 [英文说明](./README.md)。
+**构建/版本**：工程版本 **2.7.6**（即已部署的 BlueToolFixup 2.7.6 kext 的源码，二进制 `4cf277ca…`）。详见 [Changelog](./Changelog.md) 与 [英文说明](./README.md)。
 
 #### 翻译语言
 

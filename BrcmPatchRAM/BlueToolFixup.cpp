@@ -13,6 +13,8 @@
 #include <Headers/kern_version.hpp>
 #include <Headers/kern_devinfo.hpp>
 
+#include "btlfx-advsets.h"
+
 
 #define MODULE_SHORT "btlfx"
 
@@ -234,126 +236,36 @@ static const uint8_t kFastConnectA2DPGateMask12_0[] =
 // The patch replaces the capability call with "mov al, 1" at the only call site, so the
 // rest (DisableSpecSets override, multi-advertising init) runs as Apple wrote it and sends
 // standard HCI LE extended advertising commands, which BT 5.x controllers implement.
-// Activated by boot-arg -btlfxadvsets
+// 2.7.5 起默认开启（-btlfxadvsetsoff 关闭）；2.7.6 再并入 PR #1 的 5 个
+// RPA / Filter Accept List 站点（-btlfxrpaoff 可单独关掉做 A/B 对照）。
 
-// macOS 26.4.1 (25E253) x86_64 bluetoothd, 0x10040e2ca
-// mov rcx, [rax]; mov rdi, rax; call [rcx+0x9c0]; mov r14d, eax
-static const uint8_t kSpecAdvSetsCapOriginal26[] =
-{
-    0x48, 0x8B, 0x08,
-    0x48, 0x89, 0xC7,
-    0xFF, 0x91, 0xC0, 0x09, 0x00, 0x00,
-    0x41, 0x89, 0xC6
-};
-
-// mov rcx, [rax]; mov rdi, rax; mov al, 1; nop x4; mov r14d, eax
-static const uint8_t kSpecAdvSetsCapPatched26[] =
-{
-    0x48, 0x8B, 0x08,
-    0x48, 0x89, 0xC7,
-    0xB0, 0x01, 0x90, 0x90, 0x90, 0x90,
-    0x41, 0x89, 0xC6
-};
-
-// The extended scanning capability (vtable +0x9a8, 0x10040aae2 on 26.4.1). Apple enables it
-// together with BT Spec advertising sets for every chipset it knows. Once the host has used
-// LE extended advertising commands, the controller rejects legacy LE scan commands with
-// Command Disallowed, so both must be on.
-// mov rcx, [rax]; mov rdi, rax; call [rcx+0x9a8]; mov r14d, eax
-static const uint8_t kExtScanCapOriginal26[] =
-{
-    0x48, 0x8B, 0x08,
-    0x48, 0x89, 0xC7,
-    0xFF, 0x91, 0xA8, 0x09, 0x00, 0x00,
-    0x41, 0x89, 0xC6
-};
-
-// LE event mask (0x10017015c on 26.4.1): bluetoothd writes 0x1f (legacy LE events only) when
-// the chipset is 0, so Extended Advertising Report, Advertising Set Terminated, etc. are
-// masked and an extended scan never reports anything. Drop the cmove so the full mask
-// (same as every Apple chipset) is used.
-// test eax, eax; lea rax, [mask1f]; lea rdx, [maskFull]; cmove rdx, rax
-static const uint8_t kLeEventMaskOriginal26[] =
-{
-    0x85, 0xC0,
-    0x48, 0x8D, 0x05, 0xA0, 0xF2, 0x8F, 0x00,
-    0x48, 0x8D, 0x15, 0xA1, 0xF2, 0x8F, 0x00,
-    0x48, 0x0F, 0x44, 0xD0
-};
-
-static const uint8_t kLeEventMaskPatched26[] =
-{
-    0x85, 0xC0,
-    0x48, 0x8D, 0x05, 0xA0, 0xF2, 0x8F, 0x00,
-    0x48, 0x8D, 0x15, 0xA1, 0xF2, 0x8F, 0x00,
-    0x0F, 0x1F, 0x40, 0x00
-};
-
-// Advertising set random address (0x10050ef2e on 26.4.1): for chipset <= 3 bluetoothd turns
-// off LE Set Advertising Set Random Address, then enables sets whose own address type is
-// random, which the controller rejects with Invalid HCI Command Parameters (0x12).
-// Only skip that one call (jmp +7); the chipset == 0 block after it is left as is.
-// cmp dword [rax+0x334], 3; ja +0x2a -> jmp +7
-static const uint8_t kAdvSetAddrOriginal26[] =
-{
-    0x83, 0xB8, 0x34, 0x03, 0x00, 0x00, 0x03,
-    0x77, 0x2A,
-    0x31, 0xFF, 0xE8, 0xA2, 0x7D, 0xCE, 0xFF
-};
-
-static const uint8_t kAdvSetAddrPatched26[] =
-{
-    0x83, 0xB8, 0x34, 0x03, 0x00, 0x00, 0x03,
-    0xEB, 0x07,
-    0x31, 0xFF, 0xE8, 0xA2, 0x7D, 0xCE, 0xFF
-};
-
-// LE Extended Create Connection (0x10050eb5c on 26.4.1). With extended scanning on, the
-// controller rejects legacy LE Create Connection (0x200d) with Command Disallowed, and after
-// enough of those bluetoothd restarts itself ("Exceed max allowed consecutive command
-// disallowed events"). Feed 1 into the setter of gEnableExtendedCreateConnectionCommand.
-// movzx edi, byte [rbp-0xa2]; call ... -> mov edi, 1; nop2; call ...
-static const uint8_t kExtCreateConnOriginal26[] =
-{
-    0x0F, 0xB6, 0xBD, 0x5E, 0xFF, 0xFF, 0xFF,
-    0xE8, 0x2F, 0xB0, 0xCF, 0xFF
-};
-
-static const uint8_t kExtCreateConnPatched26[] =
-{
-    0xBF, 0x01, 0x00, 0x00, 0x00, 0x66, 0x90,
-    0xE8, 0x2F, 0xB0, 0xCF, 0xFF
-};
-
-// Advertising set random address before every enable (0x1001f951b on 26.4.1). bluetoothd
-// caches each set's random address and only sends LE Set Advertising Set Random Address
-// when it changed. The Intel controller forgets the address when the set's parameters are
-// rewritten (LE Set Extended Advertising Parameters with a random own address type), so
-// the following enable fails with 0x12 over and over until the address rotates (in an
-// HCI trace: 64693 failures without a fresh 0x2035, 0 with one). Always send it.
-// mov edx, [rdx+rdi+3]; xor edx, [rax+rcx+0xd11]; or edx, r8d; je +0x80 -> nop6
-static const uint8_t kAdvSetAddrResendOriginal26[] =
-{
-    0x8B, 0x54, 0x3A, 0x03,
-    0x33, 0x94, 0x08, 0x11, 0x0D, 0x00, 0x00,
-    0x44, 0x09, 0xC2,
-    0x0F, 0x84, 0x80, 0x00, 0x00, 0x00
-};
-
-static const uint8_t kAdvSetAddrResendPatched26[] =
-{
-    0x8B, 0x54, 0x3A, 0x03,
-    0x33, 0x94, 0x08, 0x11, 0x0D, 0x00, 0x00,
-    0x44, 0x09, 0xC2,
-    0x66, 0x0F, 0x1F, 0x44, 0x00, 0x00
-};
-
+// 6 组精确字节（写死 26.4.1 的 vtable 槽位 / 栈帧偏移 / rel32）已移除，
+// 统一由 btlfx-advsets.h 的掩码模式 + 结构配对定位，详见该文件头部说明。
+// 关键差异：旧实现在 26.7.2 上只有 2 条命中，其中 advsets-cap 那条还会命中到
+// 0x41019e 的另一个能力 getter（写 0x100b3b8c0），属于静默改错。
 static bool shouldPatchBoardId = false;
 static bool shouldPatchAddress = false;
 static bool shouldPatchNvramCheck = false;
 static bool shouldPatchA2DPCheck = false;
 static bool loggedA2DPCheckMiss = false;
 static bool shouldPatchSpecAdvSets = false;
+static bool shouldPatchRpaGroups = false;
+static uint32_t advsetsAppliedTotal = 0;
+
+/* cs_validate_page 对同一页可能被调用多次（重复 page-in），用它去重日志与计数 */
+static uint64_t advsetsSeenPages[24];
+static uint32_t advsetsSeenCount = 0;
+
+static bool advsets_mark_page(memory_object_offset_t off, int applied) {
+    for (uint32_t i = 0; i < advsetsSeenCount; i++)
+        if (advsetsSeenPages[i] == (uint64_t)off) return false;
+    if (advsetsSeenCount < sizeof(advsetsSeenPages) / sizeof(advsetsSeenPages[0])) {
+        advsetsSeenPages[advsetsSeenCount++] = (uint64_t)off;
+        return true;
+    }
+    /* 表满：只允许"有实际改动"的页继续上报，避免刷屏 */
+    return applied > 0;
+}
 
 static constexpr size_t kBoardIdSize = sizeof("Mac-F60DEB81FF30ACF6");
 static constexpr size_t kBoardIdSizeLegacy = sizeof("Mac-F22586C8");
@@ -459,24 +371,27 @@ static void patched_cs_validate_page(vnode_t vp, memory_object_t pager, memory_o
                     SYSLOG(MODULE_SHORT, "[a2dpcheck] enabled for bluetoothd, but no known FastConnect Gate pattern was seen yet");
                 }
             }
-            if (shouldPatchSpecAdvSets &&
-                KernelPatcher::findAndReplace(const_cast<void *>(data), PAGE_SIZE, kSpecAdvSetsCapOriginal26, sizeof(kSpecAdvSetsCapOriginal26), kSpecAdvSetsCapPatched26, sizeof(kSpecAdvSetsCapPatched26)))
-                SYSLOG(MODULE_SHORT, "[advsets] patched BT Spec advertising sets capability in %s", path);
-            if (shouldPatchSpecAdvSets &&
-                KernelPatcher::findAndReplace(const_cast<void *>(data), PAGE_SIZE, kExtScanCapOriginal26, sizeof(kExtScanCapOriginal26), kSpecAdvSetsCapPatched26, sizeof(kSpecAdvSetsCapPatched26)))
-                SYSLOG(MODULE_SHORT, "[advsets] patched extended scanning capability in %s", path);
-            if (shouldPatchSpecAdvSets &&
-                KernelPatcher::findAndReplace(const_cast<void *>(data), PAGE_SIZE, kLeEventMaskOriginal26, sizeof(kLeEventMaskOriginal26), kLeEventMaskPatched26, sizeof(kLeEventMaskPatched26)))
-                SYSLOG(MODULE_SHORT, "[advsets] patched LE event mask in %s", path);
-            if (shouldPatchSpecAdvSets &&
-                KernelPatcher::findAndReplace(const_cast<void *>(data), PAGE_SIZE, kAdvSetAddrOriginal26, sizeof(kAdvSetAddrOriginal26), kAdvSetAddrPatched26, sizeof(kAdvSetAddrPatched26)))
-                SYSLOG(MODULE_SHORT, "[advsets] patched advertising set random address in %s", path);
-            if (shouldPatchSpecAdvSets &&
-                KernelPatcher::findAndReplace(const_cast<void *>(data), PAGE_SIZE, kExtCreateConnOriginal26, sizeof(kExtCreateConnOriginal26), kExtCreateConnPatched26, sizeof(kExtCreateConnPatched26)))
-                SYSLOG(MODULE_SHORT, "[advsets] patched extended create connection in %s", path);
-            if (shouldPatchSpecAdvSets &&
-                KernelPatcher::findAndReplace(const_cast<void *>(data), PAGE_SIZE, kAdvSetAddrResendOriginal26, sizeof(kAdvSetAddrResendOriginal26), kAdvSetAddrResendPatched26, sizeof(kAdvSetAddrResendPatched26)))
-                SYSLOG(MODULE_SHORT, "[advsets] patched advertising set address resend in %s", path);
+            if (shouldPatchSpecAdvSets) {
+                int advApplied = 0;
+                const char *advFailed = nullptr;
+                int advrc = btlfx_advsets_patch_page(static_cast<uint8_t *>(const_cast<void *>(data)), PAGE_SIZE,
+                                                     &advApplied, &advFailed, shouldPatchRpaGroups);
+                if (advrc == BTLFX_ADV_OK) {
+                    if (advsets_mark_page(page_offset, advApplied)) {
+                        advsetsAppliedTotal += advApplied;
+                        const int expectedSites = shouldPatchRpaGroups ? BTLFX_ADVSETS_SITES : BTLFX_ADVSETS_CORE_SITES;
+                        SYSLOG(MODULE_SHORT, "[advsets] patched %d site(s) at page 0x%llx in %s (%u/%d total)",
+                               advApplied, (unsigned long long)page_offset, path, advsetsAppliedTotal, expectedSites);
+                        if (advsetsAppliedTotal >= expectedSites)
+                            SYSLOG(MODULE_SHORT, "[advsets] all %d sites live (mode: %s), iPhone discovery should work",
+                                   expectedSites, shouldPatchRpaGroups ? "core+RPA/FAL" : "core only, A/B");
+                    }
+                } else if (advrc != BTLFX_ADV_SKIP && advrc != BTLFX_ADV_DONE) {
+                    if (advsets_mark_page(page_offset, 0))
+                        SYSLOG(MODULE_SHORT, "[advsets] %s at %s (page 0x%llx), page left untouched",
+                               btlfx_advsets_errname(advrc), advFailed ? advFailed : "?", (unsigned long long)page_offset);
+                }
+            }
         }
     }
 }
@@ -509,9 +424,16 @@ static void pluginStart() {
         if (getKernelVersion() <= KernelVersion::Sonoma)
             shouldPatchNvramCheck = checkKernelArgument("-btlfxnvramcheck");
         shouldPatchA2DPCheck = checkKernelArgument("-btlfxa2dpcheck");
-        shouldPatchSpecAdvSets = checkKernelArgument("-btlfxadvsets");
+        // advsets 默认开启：只靠 boot-arg 才生效太容易漏掉（本次就是因为 boot-args 里
+        // 没有 -btlfxadvsets，补丁从未执行）。引擎自带 fail-safe（定位不到/结构不符
+        // 就一个字节都不写），所以默认开是安全的；要关掉用 -btlfxadvsetsoff。
+        shouldPatchSpecAdvSets = !checkKernelArgument("-btlfxadvsetsoff");
+        shouldPatchRpaGroups = shouldPatchSpecAdvSets && !checkKernelArgument("-btlfxrpaoff");
         if (shouldPatchSpecAdvSets)
-            SYSLOG(MODULE_SHORT, "[advsets] BT Spec LE advertising sets for third-party controllers enabled");
+            SYSLOG(MODULE_SHORT, "[advsets] engine v" xStringify(MODULE_VERSION)
+                   " - %d sites enabled (RPA/FAL %s; -btlfxadvsetsoff disables all, -btlfxrpaoff does A/B)",
+                   shouldPatchRpaGroups ? BTLFX_ADVSETS_SITES : BTLFX_ADVSETS_CORE_SITES,
+                   shouldPatchRpaGroups ? "on" : "off");
         if (shouldPatchA2DPCheck)
             SYSLOG(MODULE_SHORT, "[a2dpcheck] bluetoothd Read Clock workaround enabled (fast-connect A2DP bypass)");
         KernelPatcher::RouteRequest csRoute = KernelPatcher::RouteRequest("_cs_validate_page", patched_cs_validate_page, orig_cs_validate);
