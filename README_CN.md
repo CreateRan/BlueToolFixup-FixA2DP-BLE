@@ -3,6 +3,24 @@ BrcmPatchRAM
 
 [![Build Status](https://github.com/acidanthera/BrcmPatchRAM/workflows/CI/badge.svg?branch=master)](https://github.com/acidanthera/BrcmPatchRAM/actions) [![Scan Status](https://scan.coverity.com/projects/22191/badge.svg?flat=1)](https://scan.coverity.com/projects/22191)
 
+### 本 Fork 的改动（v2.7.4）
+
+本 fork 在官方 BrcmPatchRAM 基础上，针对**第三方蓝牙控制器**（如替换用的 BT 蓝牙模块 / 非 Apple 方案网卡）新增了两个功能补丁：
+
+1. **Fast-Connect A2DP 补丁** — 修复第三方控制器连接 Apple 耳机时「**已连接但没有声音**」的问题：第三方控制器广播的 A2DP codec/gate 掩码不完整，导致耳机连接成功但不走 A2DP 音频。补丁在控制器连接时恢复完整的 A2DP gate 掩码（`kFastConnectA2DPGateMask12_0`）。对应提交 `d8bd62a`（上游 `fix-a2dp-fastconnect` 分支）。
+
+2. **BLE 广播补丁引擎（`-btlfxadvsets`）** — BlueToolFixup 新增的可选引擎：让 bluetoothd 接受并修补第三方控制器的 **BLE advertising sets**（RPA / Filter Accept List 处理），官方 BlueToolFixup 会直接拒绝这类广播集，导致 BLE 设备发现失败、重连异常。对应提交 `0fb661b`（上游 `pr/btlfx-advsets` 分支）。
+
+**启动参数**
+
+| 启动参数 | 作用 |
+|---|---|
+| `-btlfxadvsets` | 启用 BLE 广播补丁引擎 |
+| `-btlfxadvsetsoff` | 关闭全部已修补的广播站点（完全关闭开关） |
+| `-btlfxrpaoff` | 仅关闭 RPA 处理（用于 A/B 对比测试） |
+
+**构建/版本**：工程版本号提升至 **2.7.4**（基线：上游 `pr/btlfx-advsets` @ `0fb661b`）。详见 [Changelog](./Changelog.md) 与 [英文说明](./README.md)。
+
 #### 翻译语言
 
 - 简体中文

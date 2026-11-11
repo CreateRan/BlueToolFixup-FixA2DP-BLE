@@ -3,6 +3,24 @@ BrcmPatchRAM
 
 [![Build Status](https://github.com/acidanthera/BrcmPatchRAM/actions/workflows/main.yml/badge.svg?branch=master)](https://github.com/acidanthera/BrcmPatchRAM/actions) [![Scan Status](https://scan.coverity.com/projects/22191/badge.svg?flat=1)](https://scan.coverity.com/projects/22191)
 
+### What this fork changes (v2.7.4)
+
+This fork extends the upstream BrcmPatchRAM with two feature patches targeting **third-party Bluetooth controllers** (e.g. replacement BT dongles / non-Apple cards) used on hackintosh machines:
+
+1. **Fast-Connect A2DP patch** — fixes the *"Connected but No Sound"* issue: third-party controllers advertise a reduced A2DP codec/gate mask, so Apple headphones connect without audio. The patch restores the full A2DP gate mask (`kFastConnectA2DPGateMask12_0`) when the controller connects. See commit `d8bd62a` (upstream `fix-a2dp-fastconnect`).
+
+2. **BLE advertising patch engine (`-btlfxadvsets`)** — a new optional engine in BlueToolFixup that lets bluetoothd accept/patch **BLE advertising sets** from third-party controllers (RPA / Filter Accept List handling), which upstream BlueToolFixup rejects. This fixes BLE device discovery and reconnection problems with such controllers. See commit `0fb661b` (upstream `pr/btlfx-advsets`).
+
+**Boot arguments**
+
+| Boot-arg | Effect |
+|---|---|
+| `-btlfxadvsets` | Enable the BLE advertising patch engine |
+| `-btlfxadvsetsoff` | Disable all patched advertising sites (full A/B off switch) |
+| `-btlfxrpaoff` | Disable RPA handling only (for A/B testing) |
+
+**Build / release**: project version bumped to **2.7.4** (base: upstream `pr/btlfx-advsets` @ `0fb661b`). See [Changelog](./Changelog.md) and [简体中文说明](./README_CN.md).
+
 ### Translate Language
 
 - [简体中文](./README_CN.md)
