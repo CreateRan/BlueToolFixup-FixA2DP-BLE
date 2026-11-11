@@ -4,6 +4,7 @@ BrcmPatchRAM Changelog
 - **Fast-Connect A2DP patch**: fixes "Connected but No Sound" for third-party controllers on Apple headphones — restores the full A2DP gate mask (`kFastConnectA2DPGateMask12_0`) on connect
 - **BlueToolFixup: BLE advertising patch engine** (`-btlfxadvsets`): bluetoothd now accepts and patches BLE advertising sets from third-party controllers (RPA/FAL site handling), fixing BLE discovery and reconnection with such controllers
   - `-btlfxadvsets` enables the engine; `-btlfxadvsetsoff` disables all patched sites; `-btlfxrpaoff` disables RPA handling only (A/B testing)
+- **tools/bluetoothd-patch**: companion patcher (`a2dp_fix.py` + `apply.sh`) extending the `-btlfxadvsets` bluetoothd patches from macOS 26.4.1 (25E253) to **all macOS 26 builds** via wildcard-tolerant byte patterns; verified on 26.7.2 (25G332); safe abort on pattern mismatch, backup + restore support, x86_64 slice only
 - Bumped project version 2.7.3 → **2.7.4** (base: upstream `pr/btlfx-advsets` @ `0fb661b`); documented fork changes in README.md / README_CN.md
 
 #### v2.7.2

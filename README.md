@@ -11,6 +11,8 @@ This fork extends the upstream BrcmPatchRAM with two feature patches targeting *
 
 2. **BLE advertising patch engine (`-btlfxadvsets`)** — a new optional engine in BlueToolFixup that lets bluetoothd accept/patch **BLE advertising sets** from third-party controllers (RPA / Filter Accept List handling), which upstream BlueToolFixup rejects. This fixes BLE device discovery and reconnection problems with such controllers. See commit `0fb661b` (upstream `pr/btlfx-advsets`).
 
+3. **bluetoothd companion patcher — macOS 26 universal support** (`tools/bluetoothd-patch/`) — the upstream `-btlfxadvsets` bluetoothd patches only match **macOS 26.4.1 (25E253)**. The bundled `a2dp_fix.py` extends the same 6 patch sites to **any macOS 26 build** using wildcard-tolerant byte patterns: it detects already-patched sites (`done` / `todo` / `missing`), aborts safely when a pattern does not match the running build, backs up before writing, and supports `--check` / `--patch` / `--restore`. Verified on **macOS 26.7.2 (25G332)**; x86_64 slice only (arm64e untouched). `apply.sh` automates the whole flow (mount system volume → patch → reboot).
+
 **Boot arguments**
 
 | Boot-arg | Effect |

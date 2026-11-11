@@ -11,6 +11,8 @@ BrcmPatchRAM
 
 2. **BLE 广播补丁引擎（`-btlfxadvsets`）** — BlueToolFixup 新增的可选引擎：让 bluetoothd 接受并修补第三方控制器的 **BLE advertising sets**（RPA / Filter Accept List 处理），官方 BlueToolFixup 会直接拒绝这类广播集，导致 BLE 设备发现失败、重连异常。对应提交 `0fb661b`（上游 `pr/btlfx-advsets` 分支）。
 
+3. **bluetoothd 配套补丁器 —— macOS 26 全版本支持**（`tools/bluetoothd-patch/`）— 上游的 `-btlfxadvsets` bluetoothd 补丁只匹配 **macOS 26.4.1 (25E253)**。随仓库提供的 `a2dp_fix.py` 用通配符容忍的字节模式把同样的 6 处补丁扩展到**任意 macOS 26 构建**：自动识别已打/待打/未找到三种状态，字节模式不匹配当前构建时安全中止，写入前自动备份，支持 `--check` / `--patch` / `--restore`。已在 **macOS 26.7.2 (25G332)** 实测通过；只改 x86_64 切片，不动 arm64e。`apply.sh` 一键完成全流程（挂载系统卷 → 打补丁 → 重启生效）。
+
 **启动参数**
 
 | 启动参数 | 作用 |
