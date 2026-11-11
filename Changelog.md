@@ -1,5 +1,9 @@
 BrcmPatchRAM Changelog
 ======================
+#### v2.7.4
+- BlueToolFixup: optional BLE advertising patch engine for third-party controllers, activated by `-btlfxadvsets` (RPA/FAL site control; `-btlfxadvsetsoff` disables all, `-btlfxrpaoff` toggles RPA only for A/B testing)
+- Bumped project version to 2.7.4 (base: upstream `pr/btlfx-advsets` @ 0fb661b)
+
 #### v2.7.2
 - Added `bluetoothd` patches for macOS 26 (thx @spotlightishere et al)
 
